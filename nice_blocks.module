@@ -76,6 +76,12 @@ function nice_blocks_block_configure($delta) {
     '#description' => t('TODO: Provide a custom "Block" view mode.'),
     '#default_value' => ($c = $config->get('nice_blocks_mode_' . $delta)) ? $c : 'teaser',
   );
+  $form['nice_blocks_page_' . $delta] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Page mode'),
+    '#description' => t('Check to remove title, submitted, comments, etc...'),
+    '#default_value' => ($c = $config->get('nice_blocks_page_' . $delta)) ? $c : FALSE,
+  );
   return $form;
 }
 
@@ -90,6 +96,7 @@ function nice_blocks_block_save($delta, $edit) {
     ->set('nice_blocks_type_' . $delta, $edit['nice_blocks_type_' . $delta])
     ->set('nice_blocks_id_' . $delta, $edit['nice_blocks_id_' . $delta])
     ->set('nice_blocks_mode_' . $delta, $edit['nice_blocks_mode_' . $delta])
+    ->set('nice_blocks_page_' . $delta, $edit['nice_blocks_page_' . $delta])
     ->save();
 }
 
@@ -105,10 +112,30 @@ function nice_blocks_block_view($delta = 1) {
     $node = node_load($id);
   }
   if (!empty($node)) {
-    $block['content'] = drupal_render(node_view($node, $mode));
+    $build = node_view($node, $mode);
+    $build['#nice_blocks_id'] = $delta;
+    $block['content'] = drupal_render($build);
   }
   else {
     $block['content'] = FALSE;
   }
   return $block;
+}
+
+/**
+ * Implements hook_preprocess_node().
+ */
+function nice_blocks_preprocess_node(&$variables) {
+  if (!empty($variables['elements']['#nice_blocks_id'])) {
+    $config = config('nice_blocks.settings');
+    $delta = $variables['elements']['#nice_blocks_id'];
+    $page = $config->get('nice_blocks_page_' . $delta);
+    if ($page) {
+      $variables['page'] = TRUE;
+      $variables['display_submitted'] = FALSE;
+      if (isset($variables['comments']['comments'])) {
+        unset ($variables['comments']['comments']);
+      }
+    }
+  }
 }
