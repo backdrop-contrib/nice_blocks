@@ -1,28 +1,16 @@
 <?php
 
 /**
- * Implements hook_config_info().
- */
-function nice_blocks_config_info() {
-  $prefixes['nice_blocks.settings'] = array(
-    'label' => t('Nice Blocks settings'),
-    'group' => t('Configuration'),
-  );
-  return $prefixes;
-}
-
-
-/**
  * Implements hook_menu().
  */
 function nice_blocks_menu() {
-  $items['admin/config/user-interface/nice_blocks'] = array(
-    'title' => 'Nice menus',
-    'description' => 'Configure Nice menus.',
-    'page callback' => 'backdrop_get_form',
-    'page arguments' => array('nice_blocks_admin_settings'),
-    'access arguments' => array('administer site configuration'),
-    'file' => 'nice_blocks.admin.inc',
+  $items['nice_blocks/autocomplete'] = array(
+    'title' => 'Node autocomplete',
+    'page callback' => 'nice_blocks_autocomplete',
+    'access callback' => 'user_access',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+    'file' => 'nice_blocks.pages.inc',
   );
 
   return $items;
@@ -32,110 +20,66 @@ function nice_blocks_menu() {
  * Implements hook_block_info().
  */
 function nice_blocks_block_info() {
-  $blocks = array();
-  $number = config_get('nice_blocks.settings', 'nice_blocks_number');
-  // Todo hit config only once.
-  for ($i = 1; $i <= $number; $i++) {
-    if (config_get('nice_blocks.settings', 'nice_blocks_name_' . $i)) {
-      $blocks[$i]['info'] = config_get('nice_blocks.settings', 'nice_blocks_name_' . $i) . ' (Nice block)';
-    }
-    else {
-      $blocks[$i]['info'] = 'Nice block ' . $i . ' (Nice block)';
-    }
-    // We have too many things changing per user, per page to cache.
-    $blocks[$i]['cache'] = BACKDROP_NO_CACHE;
-  }
+  $blocks['content'] = array(
+    'info' => t('Content block'),
+    'description' => t('Displays a node in a block.'),
+    'class' => 'NiceBlock',
+  );
   return $blocks;
 }
 
 /**
- * Implements hook_block_configure().
+ * Implements hook_autoload_info().
  */
-function nice_blocks_block_configure($delta) {
-  $config = config('nice_blocks.settings');
-
-  $form['nice_blocks_name_' . $delta] = array(
-    '#type' => 'textfield',
-    '#title' => t('Block name'),
-    '#default_value' => ($c = $config->get('nice_blocks_name_' . $delta)) ? $c : 'Nice block ' . $delta,
+function nice_blocks_autoload_info() {
+  return array(
+    'NiceBlock' => 'nice_blocks.block.inc',
   );
-  $form['nice_blocks_type_' . $delta] = array(
-    '#type' => 'textfield',
-    '#title' => t('Entity type'),
-    '#description' => t('Please don\'t type anything other than `node`.'),
-    '#default_value' => ($c = $config->get('nice_blocks_type_' . $delta)) ? $c : 'node',
-  );
-  $form['nice_blocks_id_' . $delta] = array(
-    '#type' => 'textfield',
-    '#title' => t('Entity id'),
-    '#default_value' => ($c = $config->get('nice_blocks_id_' . $delta)) ? $c : '',
-  );
-  $form['nice_blocks_mode_' . $delta] = array(
-    '#type' => 'textfield',
-    '#title' => t('View mode'),
-    '#description' => t('TODO: Provide a custom "Block" view mode.'),
-    '#default_value' => ($c = $config->get('nice_blocks_mode_' . $delta)) ? $c : 'teaser',
-  );
-  $form['nice_blocks_page_' . $delta] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Page mode'),
-    '#description' => t('Check to remove title, submitted, comments, etc...'),
-    '#default_value' => ($c = $config->get('nice_blocks_page_' . $delta)) ? $c : FALSE,
-  );
-  return $form;
-}
-
-
-/**
- * Implements hook_block_save().
- */
-function nice_blocks_block_save($delta, $edit) {
-  $config = config('nice_blocks.settings');
-  $config
-    ->set('nice_blocks_name_' . $delta, $edit['nice_blocks_name_' . $delta])
-    ->set('nice_blocks_type_' . $delta, $edit['nice_blocks_type_' . $delta])
-    ->set('nice_blocks_id_' . $delta, $edit['nice_blocks_id_' . $delta])
-    ->set('nice_blocks_mode_' . $delta, $edit['nice_blocks_mode_' . $delta])
-    ->set('nice_blocks_page_' . $delta, $edit['nice_blocks_page_' . $delta])
-    ->save();
 }
 
 /**
- * Implements hook_block_view().
+ * Implements hook_entity_info_alter().
+ * Add the 'Block' view mode for nodes.
  */
-function nice_blocks_block_view($delta = 1) {
-  $config = config('nice_blocks.settings');
-  // Build the Nice block for the block.
-  $id = $config->get('nice_blocks_id_' . $delta);
-  $mode = $config->get('nice_blocks_mode_' . $delta);
-  if (!empty($id)) {
-    $node = node_load($id);
-  }
-  if (!empty($node)) {
-    $build = node_view($node, $mode);
-    $build['#nice_blocks_id'] = $delta;
-    $block['content'] = drupal_render($build);
-  }
-  else {
-    $block['content'] = FALSE;
-  }
-  return $block;
+function nice_blocks_entity_info_alter(&$info) {
+  $info['node']['view modes'] += array(
+    'block' => array(
+      'label' => t('Block'),
+      'custom settings' => FALSE,
+    ),
+  );
 }
 
 /**
  * Implements hook_preprocess_node().
  */
 function nice_blocks_preprocess_node(&$variables) {
-  if (!empty($variables['elements']['#nice_blocks_id'])) {
-    $config = config('nice_blocks.settings');
-    $delta = $variables['elements']['#nice_blocks_id'];
-    $page = $config->get('nice_blocks_page_' . $delta);
-    if ($page) {
-      $variables['page'] = TRUE;
+  if (!empty($variables['elements']['#content_block_id'])) {
+    $variables['classes'][] = 'nice-content-block';
+
+    if (!empty($variables['page']) && !empty($variables['elements']['#content_block_title'])) {
+      $variables['page'] = false;
+    }
+
+    if (!$variables['elements']['#content_block_more']) {
+      unset ($variables['content']['links']['node']);
+    }
+
+    if (!$variables['elements']['#content_block_comments']) {
+      unset ($variables['content']['links']['comment']);
+    }
+
+    if (!$variables['elements']['#content_block_submitted']) {
       $variables['display_submitted'] = FALSE;
-      if (isset($variables['comments']['comments'])) {
-        unset ($variables['comments']['comments']);
-      }
+    }
+    else {
+      $variables['display_submitted'] = TRUE;
+    }
+
+    if (empty($variables['title'])) {
+    // hide the empty <h2>
+      $variables['title_prefix'] = '<div style="display: none;">';
+      $variables['title_suffix'] = '</div>';
     }
   }
 }

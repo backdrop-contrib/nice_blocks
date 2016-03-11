@@ -6,4 +6,5 @@ This is a sandbox project, which contains experimental code for developer use on
 
 It aims to validate the concept of supply fieldable entities to blocks.
 
-Most of the code and admin UX comes from @docwilmot's port of nice_menus, even the name !
+Originally based on @docwilmot's port of nice_menus, (hence the name !), it was refactored and completed with parts of [PR #1246](https://github.com/backdrop/backdrop/pull/1246).
+
